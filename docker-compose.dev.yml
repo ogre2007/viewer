@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+ viewer:
+  build:
+   context: .
+  ports:
+  - 5000:5000
+  volumes:
+  - ./:/app
+
+ ghidra:
+  image: ghidraaas
+  ports:
+  - 6666:8080
+  volumes:
+  - ghidra:/opt
+
+volumes:
+  ghidra:
