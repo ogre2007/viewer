@@ -16,5 +16,11 @@ services:
   volumes:
   - ghidra:/opt
 
+ redis:
+  image: redis
+  ports:
+  - 6667:6379
+  volumes:
+  - redis:/data
 volumes:
   ghidra:
