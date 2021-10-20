@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/shorthandcss@1.1.1/dist/lite.shorthand.min.css">
+<style>
+/* The grid: Three equal columns that floats next to each other */
+.column {
+  float: left;
+  width: 20%;
+  padding: 60px;
+  text-align: center;
+  font-size: 25px;
+  cursor: pointer;
+  color: white;
+}
+
+.containerTab {
+  padding: 20px;
+  color: white;
+  display: none;
+}
+
+/* Clear floats after the columns */
+.row:after {
+  content: "";
+  display: table;
+  clear: both;
+}
+
+/* Closable button inside the image */
+.closebtn {
+  float: right;
+  color: white;
+  font-size: 35px;
+  cursor: pointer;
+}
+</style>
+    <head>
+        <title>View results</title>
+    </head>
+</head>
+<body>
+
+<!-- The grid: three columns -->
+<div class="row">
+   {% for tool in tools %}
+    <div class="column" onclick="openTab('{{tool.id}}');" style="background:{{tool.color}};">{{tool.name}}</div>
+    {% endfor %}
+</div>
+
+<div class="horizontal-group">
+    <button type="button" onclick="openTab('code_analysis');" class="button bg-white gray border-gray">Code Analysis</button>
+    <button type="button" class="button bg-white border-gray">Signature Search</button>
+    <button type="button" class="button-lg bg-gray-lighter gray loading border-gray">Capabilities</button>
+</div>
+
+<div class="row justify-content-center">
+    <div id="code_analysis" class="containerTab bg-gray">
+      <pre class="prettyprint" id="code_analysis_flist">
+        ...
+      </pre>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/gh/google/code-prettify@master/loader/run_prettify.js"></script>
+
+
+
+<script>
+
+document.getElementById("code_analysis_flist").innerHTML = JSON.stringify({{results.code_analysis}})
+
+
+function openTab(tabName) {
+  var i, x;
+  x = document.getElementsByClassName("containerTab");
+  for (i = 0; i < x.length; i++) {
+    x[i].style.display = "none";
+  }
+  document.getElementById(tabName).style.display = "block";
+}
+
+function loadDoc(hash, toolId) {
+  const xhttp = new XMLHttpRequest();
+  xhttp.onreadystatechange = function() {
+    if (this.readyState == 4 && this.status == 200) {
+      document.getElementById(toolId).innerHTML = this.responseText;
+    }
+    else {
+      document.getElementById(toolId).innerHTML = this.statusText;
+    }
+  };
+  xhttp.open("GET", hash + '/' + toolId, true);
+  xhttp.send();
+}
+
+</script>
+
+</body>
+
+</html>
