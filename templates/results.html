@@ -41,35 +41,44 @@
 </head>
 <body>
 
-<!-- The grid: three columns -->
-<div class="row">
-   {% for tool in tools %}
-    <div class="column" onclick="openTab('{{tool.id}}');" style="background:{{tool.color}};">{{tool.name}}</div>
-    {% endfor %}
-</div>
+<script src="https://cdn.jsdelivr.net/gh/google/code-prettify@master/loader/run_prettify.js"></script>
 
 <div class="horizontal-group">
-    <button type="button" onclick="openTab('code_analysis');" class="button bg-white gray border-gray">Code Analysis</button>
-    <button type="button" class="button bg-white border-gray">Signature Search</button>
-    <button type="button" class="button-lg bg-gray-lighter gray loading border-gray">Capabilities</button>
+    <button type="button" id='bt_code_analysis' onclick="openTab('code_analysis');" class="button-lg bg-white gray loading border-gray">Code Analysis</button>
+    <button type="button" id='bt_signatures' onclick="openTab('signatures');" class="button-lg bg-white gray loading border-gray">Signature Search</button>
+    <button type="button" id='bt_capabilities' onclick="openTab('capabilities');" class="button-lg bg-gray-lighter gray loading border-gray">Capabilities</button>
 </div>
 
 <div class="row justify-content-center">
-    <div id="code_analysis" class="containerTab bg-gray">
-      <pre class="prettyprint" id="code_analysis_flist">
+    <div id="code_analysis" class="containerTab">
+      <pre class="prettyprint" id="code_analysis_result">
+        ...
+      </pre>
+    </div>
+        <div id="signatures" class="containerTab">
+      <pre class="prettyprint" id="signatures_result">
+        ...
+      </pre>
+    </div>
+        <div id="capabilities" class="containerTab">
+      <pre class="prettyprint" id="capabilities_result">
         ...
       </pre>
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/gh/google/code-prettify@master/loader/run_prettify.js"></script>
+
 
 
 
 <script>
-
-document.getElementById("code_analysis_flist").innerHTML = JSON.stringify({{results.code_analysis}})
-
+    /*
+stri = '{}';
+stri = stri.replaceAll('&#34;', '"');
+stri = JSON.parse(stri);
+document.getElementById("code_analysis_flist").innerHTML = JSON.stringify(stri, null, 2)
+*/
+addEventListener('load', function(event) { PR.prettyPrint(); }, false);
 
 function openTab(tabName) {
   var i, x;
@@ -80,19 +89,32 @@ function openTab(tabName) {
   document.getElementById(tabName).style.display = "block";
 }
 
-function loadDoc(hash, toolId) {
-  const xhttp = new XMLHttpRequest();
-  xhttp.onreadystatechange = function() {
-    if (this.readyState == 4 && this.status == 200) {
-      document.getElementById(toolId).innerHTML = this.responseText;
+async function loadResult(hash, results_type) {
+  fetch(hash + '/' + results_type)
+  .then(response => response.text())
+  .then(text => {
+
+    var el = document.getElementById(results_type +'_result');
+    parsed = text;
+    try {
+        parsed = JSON.stringify(JSON.parse(JSON.parse(text)), null, 2);
+        console.log(parsed, 'parsed')
     }
-    else {
-      document.getElementById(toolId).innerHTML = this.statusText;
+    catch {
+        parsed = text;
+        console.log(parsed, 'not parsed');
     }
-  };
-  xhttp.open("GET", hash + '/' + toolId, true);
-  xhttp.send();
+    el.innerHTML = PR.prettyPrintOne(parsed);
+    el.classList.remove("prettyprinted");
+    document.getElementById('bt_'+results_type).classList.remove("loading");
+    });
+  PR.prettyPrint();
 }
+(async() => {
+await Promise.all([loadResult('{{hash}}', 'code_analysis'),
+    loadResult('{{hash}}', 'signatures'),
+    loadResult('{{hash}}', 'capabilities')])
+})();
 
 </script>
 

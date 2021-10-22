@@ -67,15 +67,15 @@ display:none;
 <h1 class="fs-l5 mono fw-900 gray-dark relative-top text-center">Binary analysis platform</h1>
 
 <div class="gray asap mono m-l3">
-  <form class="md-w-75pc mx-auto" action = /upload_file method=post enctype=multipart/form-data>
+  <form id=form class="md-w-75pc mx-auto" action="/upload_file" method=post>
     <div class="flex">
       <input type="file" name=file class="input m-2">
-      <button id="file-upload" type="submit" class="button m-2" value=Upload>UPLOAD</button>
+      <button id="file-upload" type="submit" class="button m-2">UPLOAD</button>
     </div>
   </form>
 </div>
 
-<div class="absolute-bottom gray asap">
+<div class="relative-bottom gray asap">
 <h1 class="text-center mono">Prior results</h1>
 
 <div class="table-container mono table-head row-border">
@@ -100,6 +100,44 @@ display:none;
 </tbody>
   </div>
 </div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+<script type="text/javascript">
+
+$("#form").submit(function(event) {
+
+  event.preventDefault();
+  var $form = $(this),
+    url = $form.attr('action');
+  var formData = $('form')[0];
+  var formData = new FormData(form);
+
+  $.ajax({
+    url: '/upload_file',
+    data: formData,
+    type: 'POST',
+    contentType: false, // NEEDED, DON'T OMIT THIS (requires jQuery 1.6+)
+    processData: false, // NEEDED, DON'T OMIT THIS
+    // ... Other options like success and etc
+});
+  /* Alerts the results */
+  posting.done(function(data) {
+    $('#result').text('success');
+  });
+  posting.fail(function() {
+    $('#result').text('failed');
+  });
+});
+
+
+function uploadFile()  {
+  console.log('lol')
+  
+
+}
+
+</script>
+
 </body>
 </html>
 

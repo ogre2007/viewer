@@ -9,11 +9,8 @@ import json
 import requests
 from flask import Flask, flash, request, redirect, url_for, send_from_directory, render_template
 from werkzeug.utils import secure_filename
-from flask_bootstrap import Bootstrap
 import redis
 
-
-logging.basicConfig()
 
 
 
@@ -23,9 +20,12 @@ ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif',}
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1000 * 1000
-bootstrap = Bootstrap(app)
 r = redis.StrictRedis('localhost', 6667, 2, charset='utf-8', decode_responses=True)
 
+app.config.update(
+    CELERY_BROKER_URL='redis://localhost:6667',
+    CELERY_RESULT_BACKEND='redis://localhost:6667'
+)
 
 
 GHIDRA = {'id': 'ghidra', 'name': 'Дизассемблер', 'color': 'orange'}
@@ -33,7 +33,7 @@ BINWALK = {'id': 'binwalk', 'name': 'Поиск сигнатур', 'color': 'gre
 CAPA = {'id': 'capa', 'name': 'Поведенческий анализ', 'color': 'purple'}
 TOOL_IDS = {'ghidra', 'binwalk', 'capa'}
 TOOLS = [GHIDRA, BINWALK, CAPA] 
-CONNS = {'ghidra': 'http://localhost:8080/ghidra/api'}
+CONNS = {'ghidra': 'http://localhost:8080/ghidra/api', 'binwalk':'http://localhost:8081'}
 
 #####################################
 #   INIT                            #
@@ -112,20 +112,31 @@ async def analyze_ghidra(sha256):
 
     resp = requests.post("%s/analyze_sample/" % CONNS['ghidra'], files=bb, timeout=300)
     if resp.status_code == 200:
-        resp = requests.get("%s/get_functions_list/%s" % (CONNS['ghidra'], sha256), timeout=300)
-        
-        print("get_functions_list_detailed status_code:", resp.status_code)
-        result = {}
-        #data = json.loads(resp.text)['functions_list']
-        result = json.dumps(resp.text)
-        r.hset(sha256, key='code_analysis', value=result)
-        return True
+        resp = requests.get("%s/get_functions_list/%s" % (CONNS['ghidra'], sha256), 
+            timeout=300, params={'id':sha256})
+        if resp.status_code == 200:
+            print("get_functions_list_detailed status_code:", resp.status_code)
+            result = {}
+            #data = json.loads(resp.text)['functions_list']
+            result = json.dumps(resp.text)
+            r.hset(sha256, key='code_analysis', value=result)
+            return True
+        print(resp.text)
     print("something goes wrong with ghidra")
     return False
 
 async def analyze_binwalk(sha256):
-    result = ''
-    r.hset(sha256, 'signatures', result)
+    blob = load_from_db(sha256)
+    bb = {'file': io.BytesIO(blob)}
+
+    resp = requests.post("%s/analyze" % CONNS['binwalk'], files=bb, timeout=300, params={'id':sha256})
+    if resp.status_code == 200:
+        result = resp.text
+        r.hset(sha256, key='signatures', value=result)
+        return True
+    print(resp.text)
+    print("something goes wrong with binwalk")
+
     return False
 
 async def analyze_capa(sha256):
@@ -144,13 +155,23 @@ def download_file(name):
 
 @app.route('/results/<hash>')
 def results(hash):
-    results = r.hgetall(hash)
-    print(results)
-    return render_template('results.html', hash=hash, tools=TOOLS, results = results)
+    #results = r.hgetall(hash)
+    #results['code_analysis'] = json.loads(results['code_analysis'])
+    #print(results['code_analysis'])
+    return render_template('results.html', hash=hash, tools=TOOLS)
 
-@app.route('/results/<hash>/<tool>')
-def results_get(hash, tool):
-    return (r.hget(hash, tool), 200)
+@app.route('/results/<h>/<result_type>')
+async def results_get(h, result_type):
+    result = None
+    print(result_type)
+    if result_type in {'code_analysis', 'signatures'}:#, 'capabilities'}:
+        while not result:
+            result = r.hget(h, result_type)
+            print(result)
+            await asyncio.sleep(2)
+        return (result, 200)
+
+    return ('Not found', 404)
 
 
 @app.route('/upload_file', methods=['POST'])
@@ -171,6 +192,8 @@ async def upload_file():
             h = sha256_hash(blob)
             logging.warning(f'hash for {file.filename} is {h}')
             await process_file(h, blob, file.filename)
+            
+            
             return redirect('/index.html')
 
 
@@ -183,7 +206,7 @@ def index():
     files = dict()
     for h in hashes:
         files[h] = r.hgetall(h)
-    logging.warning(files)
+    #logging.warning(files)
     return render_template('index.html', title='Main page', files=files)
 
 
