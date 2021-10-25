@@ -9,6 +9,8 @@ import json
 import requests
 from flask import Flask, flash, request, redirect, url_for, send_from_directory, render_template
 from werkzeug.utils import secure_filename
+from werkzeug.exceptions import BadRequest
+from werkzeug.exceptions import HTTPException
 import redis
 
 
@@ -20,51 +22,65 @@ ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif',}
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1000 * 1000
-r = redis.StrictRedis('localhost', 6667, 2, charset='utf-8', decode_responses=True)
+r = redis.StrictRedis('localhost', 6667, 0, charset='utf-8', decode_responses=True)
 
-app.config.update(
-    CELERY_BROKER_URL='redis://localhost:6667',
-    CELERY_RESULT_BACKEND='redis://localhost:6667'
-)
+GHIDRA = 'ghidra'
+BINWALK = 'binwalk'
+CAPA = 'capa'
 
+ANALYZERS = {'ghidra', 'binwalk'}
+ADDRESSES = {'ghidra': 'localhost:8080/ghidra/api', 'binwalk':'localhost:8081'}
+UPLOAD_URLS = {'ghidra': '/upload', 'binwalk': '/upload' }
+ANALYZE_URLS = {'ghidra': '/analyze', 'binwalk': '/analyze' }
 
-GHIDRA = {'id': 'ghidra', 'name': 'Дизассемблер', 'color': 'orange'}
-BINWALK = {'id': 'binwalk', 'name': 'Поиск сигнатур', 'color': 'green'}
-CAPA = {'id': 'capa', 'name': 'Поведенческий анализ', 'color': 'purple'}
-TOOL_IDS = {'ghidra', 'binwalk', 'capa'}
-TOOLS = [GHIDRA, BINWALK, CAPA] 
-CONNS = {'ghidra': 'http://localhost:8080/ghidra/api', 'binwalk':'http://localhost:8081'}
+RESULT_SERVICE_MAPPING = {'code_analysis': GHIDRA, 'signatures': BINWALK, 'capabilities': CAPA}
 
 #####################################
 #   INIT                            #
 #####################################
 
-def init_db():
+class Analyzer(object):
+    def __init__(self, name, address, upload_url, analyze_url):
+        self.name = name
+        self.address = address
+        self.upload_url = upload_url
+        self.analyze_url = analyze_url
 
-    hashes = ['6ed58fe92eac477dc8c798c4e56152e2853468406d1d7da7a5250813413b0356', 
-        'ca11a97eb88f411eb8924be79b2e0bfc1acebf98bf295b7926be5fb153ff611c']
+    async def upload(self, blob, sha256 = None):
+        if not sha256:
+            sha256 = sha256_hash(blob)
+        resp = await requests.post(f'http://{self.address}/{self.upload_url}' , 
+            files={'file': io.BytesIO(blob)},
+            params={'id': sha256})
+        return resp
 
-    files = {hashes[0]:{
-            'filename': 'malware.exe',
-            'size': '50kb',
-    },
-        hashes[1]:{
-            'filename': 'nicefile.exe',
-            'size': '60kb',
-    }
-    }
-    r.lpush('files', *hashes)
-
-
-    with r.pipeline() as pipe:
-        for f_id, f in files.items():
-            pipe.hset(f_id, mapping = f)
-        pipe.execute()
-
+    async def analyze(self, sha256):
+        resp = await requests.get(f'http://{self.address}/{self.analyze_url}' , 
+            params={'id': sha256},
+            timeout=300)
+        return resp
     
-init_db()
+    def ping(self):
+        pass
 
 
+class GhidraAnalyzer(Analyzer):
+    async def upload(self, blob, sha256 = None):
+        resp = await Analyzer.upload(self, blob, sha256)
+
+        resp = await requests.get(f'http://{self.address}/analyze_sample' , 
+            params={'id': sha256},
+            timeout=300)
+        return resp
+
+
+
+
+Analyzers_list = [GhidraAnalyzer(GHIDRA, ADDRESSES[GHIDRA],
+                                 UPLOAD_URLS[GHIDRA], ANALYZE_URLS[GHIDRA]),
+    Analyzer(BINWALK, ADDRESSES[BINWALK],
+                                 UPLOAD_URLS[BINWALK], ANALYZE_URLS[BINWALK])
+]
 #####################################
 #   UTILS                           #
 #####################################
@@ -78,99 +94,44 @@ def sha256_hash(blob):
     return sha256_hash.hexdigest()
 
 
-
-
-#####################################
-#   ANALYSIS                        #
-#####################################
-
-async def save_to_db(hash, blob, filename, size):
-    with r.pipeline() as pipe:
-        pipe.lpush('files', hash)
-        pipe.hset(hash, 'filename', filename)
-        pipe.hset(hash, 'blob', base64.b64encode(blob))
-        pipe.hset(hash, 'size', f'{size/1024}KB')
-        pipe.execute()
+def save_to_db(h, filename, size):
+    r.lpush('files', h)
+    r.hset(h, 'name', filename)
+    r.hset(h, 'size', '%dMB' % size/(1024*1024))
+    return True
 
 def load_from_db(h):
     return base64.b64decode(r.hget(h, 'blob'))
-
-
-async def process_file(sha256, file, filename):
-    blob = file
-    await save_to_db(sha256, blob,filename, len(blob))
-
-    await asyncio.gather(
-        analyze_ghidra(sha256),
-        analyze_binwalk(sha256),
-        analyze_capa(sha256)
-    )
-
-async def analyze_ghidra(sha256):
-    blob = load_from_db(sha256)
-    bb = {'sample': io.BytesIO(blob)}
-
-    resp = requests.post("%s/analyze_sample/" % CONNS['ghidra'], files=bb, timeout=300)
-    if resp.status_code == 200:
-        resp = requests.get("%s/get_functions_list/%s" % (CONNS['ghidra'], sha256), 
-            timeout=300, params={'id':sha256})
-        if resp.status_code == 200:
-            print("get_functions_list_detailed status_code:", resp.status_code)
-            result = {}
-            #data = json.loads(resp.text)['functions_list']
-            result = json.dumps(resp.text)
-            r.hset(sha256, key='code_analysis', value=result)
-            return True
-        print(resp.text)
-    print("something goes wrong with ghidra")
-    return False
-
-async def analyze_binwalk(sha256):
-    blob = load_from_db(sha256)
-    bb = {'file': io.BytesIO(blob)}
-
-    resp = requests.post("%s/analyze" % CONNS['binwalk'], files=bb, timeout=300, params={'id':sha256})
-    if resp.status_code == 200:
-        result = resp.text
-        r.hset(sha256, key='signatures', value=result)
-        return True
-    print(resp.text)
-    print("something goes wrong with binwalk")
-
-    return False
-
-async def analyze_capa(sha256):
-    result =''
-    r.hset(sha256, 'capabilities', result)
-    return False
 
 #####################################
 #   API                             #
 #####################################
 
+async def process_file(sha256, file, filename):
+    blob = file
+    await save_to_db(sha256, filename, len(blob))
+    await asyncio.gather(*[analyzer.upload(blob, sha256) for analyzer in ANALYZERS])
 
-@app.route('/download_file/<name>')
-def download_file(name):
-    return send_from_directory(app.config['UPLOAD_FOLDER'], name)
 
 @app.route('/results/<hash>')
 def results(hash):
-    #results = r.hgetall(hash)
-    #results['code_analysis'] = json.loads(results['code_analysis'])
-    #print(results['code_analysis'])
-    return render_template('results.html', hash=hash, tools=TOOLS)
+    if r.exists('files', hash):
+        return render_template('results.html', hash=hash)
+    else:
+        return render_template('404.html')
 
 @app.route('/results/<h>/<result_type>')
 async def results_get(h, result_type):
-    result = None
-    print(result_type)
-    if result_type in {'code_analysis', 'signatures'}:#, 'capabilities'}:
-        while not result:
-            result = r.hget(h, result_type)
-            print(result)
-            await asyncio.sleep(2)
-        return (result, 200)
-
+    try:
+        svc_name = RESULT_SERVICE_MAPPING[result_type]
+        for an in Analyzers_list:
+            if an.name == svc_name:
+                resp = await an.analyze(h)
+                return resp
+        else:
+            raise BadRequest(f"no such analyzer: {svc_name}")
+    except KeyError as e:
+        return BadRequest("no such result")
     return ('Not found', 404)
 
 
