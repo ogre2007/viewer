@@ -44,18 +44,38 @@ display:none;
 
     position: fixed; 
     background:white; 
-    width:100%;
+    width:90%;
     bottom:0;
 }
 
+table {
+  width: 60%;
+}
 
+td {
+  padding: 10px;
+}
+
+td.shrink {
+  white-space: nowrap;
+  width: 1px;
+}
+
+th {
+  padding: 10px;
+}
+
+th.shrink {
+  white-space: nowrap;
+  width: 1px;
+}
 
 </style>
     <head>
         {% if title %}
-        <title>{{ title }} - nishin</title>
+        <title>{{ title }} - Viewer</title>
         {% else %}
-        <title>Welcome to nishin!</title>
+        <title>Welcome to Viewer!</title>
         {% endif %}
     
     
@@ -64,13 +84,13 @@ display:none;
 
 <body>
 
-<h1 class="fs-l5 mono fw-900 gray-dark relative-top text-center">Binary analysis platform</h1>
+<h1 class="fs-l5 mono fw-900 gray-dark relative-top text-center">VIEWER: Binary analysis platform</h1>
 
-<div class="gray asap mono m-l3">
+<div class="gray asap mono">
   <form id=form class="md-w-75pc mx-auto" action="/upload_file" method=post>
-    <div class="flex">
-      <input type="file" name=file class="input m-2">
-      <button id="file-upload" type="submit" class="button m-2">UPLOAD</button>
+    <div class="flex m-l5">
+      <input type="file" name=file class="input">
+      <button id="file-upload" type="submit" class="button">UPLOAD</button>
     </div>
   </form>
 </div>
@@ -82,19 +102,19 @@ display:none;
 <table>
   <thead>
   <tr>
-    <th>Hash</th>
-    <th>Name</th>
-    <th>Size</th>
-    <th>Report</th>
+    <th class=shrink>Hash</th>
+    <th class=shrink>Name</th>
+    <th class=shrink>Size</th>
+    <th class=shrink>Report</th>
   </tr>
 </thead>
 <tbody>  
   {% for hash, file in files.items() %}
   <tr>
-    <td>{{hash}}</td>
-    <td>{{file.filename}}</td>
-    <td>{{file.size}}</td>
-    <td><a href="{{url_for('results', hash=hash)}}">Go to report</a></td>
+    <td class=shrink>{{hash}}</td>
+    <td class=shrink>{{file.name}}</td>
+    <td class=shrink>{{file.size}}</td>
+    <td class=shrink><a href="{{url_for('results', hash=hash)}}">Analyze</a></td>
   </tr>
   {% endfor %}
 </tbody>

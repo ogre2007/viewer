@@ -16,7 +16,7 @@
 
 .containerTab {
   padding: 20px;
-  color: white;
+  color: black;
   display: none;
 }
 
@@ -34,16 +34,20 @@
   font-size: 35px;
   cursor: pointer;
 }
+pre {
+  white-space: pre-wrap;
+}
 </style>
     <head>
         <title>View results</title>
     </head>
 </head>
 <body>
-
+<h1 class="fs-l4 mono fw-900 gray-dark relative-top text-center">VIEWER: Binary analysis platform</h1>
+<h2 class="fs-l2 mono fw-900 gray-dark relative-top text-center">results for {{name}}</h1>
 <script src="https://cdn.jsdelivr.net/gh/google/code-prettify@master/loader/run_prettify.js"></script>
 
-<div class="horizontal-group">
+<div class="horizontal-group sticky-center">
     <button type="button" id='bt_code_analysis' onclick="openTab('code_analysis');" class="button-lg bg-white gray loading border-gray">Code Analysis</button>
     <button type="button" id='bt_signatures' onclick="openTab('signatures');" class="button-lg bg-white gray loading border-gray">Signature Search</button>
     <button type="button" id='bt_capabilities' onclick="openTab('capabilities');" class="button-lg bg-gray-lighter gray loading border-gray">Capabilities</button>
@@ -51,16 +55,31 @@
 
 <div class="row justify-content-center">
     <div id="code_analysis" class="containerTab">
+      <div class="mono"> provided by <a href=https://github.com/NationalSecurityAgency/ghidra>GHIDRA</a></div>
+      <span class=pln>
+          
+      </span>
       <pre class="prettyprint" id="code_analysis_result">
         ...
       </pre>
     </div>
-        <div id="signatures" class="containerTab">
+    
+    <div id="signatures" class="containerTab">
+      <div class="mono"> provided by <a href=https://github.com/mandiant/capa>capa</a></div>
+      <span class=pln>
+          
+      </span>
       <pre class="prettyprint" id="signatures_result">
         ...
       </pre>
     </div>
-        <div id="capabilities" class="containerTab">
+        
+
+    <div id="capabilities" class="containerTab">
+       <div class="mono"> provided by <a href=https://github.com/ReFirmLabs/binwalk>Binwalk</a></div>
+       <span class=pln>
+           
+       </span>
       <pre class="prettyprint" id="capabilities_result">
         ...
       </pre>
@@ -97,12 +116,14 @@ async function loadResult(hash, results_type) {
     var el = document.getElementById(results_type +'_result');
     parsed = text;
     try {
-        parsed = JSON.stringify(JSON.parse(JSON.parse(text)), null, 2);
-        console.log(parsed, 'parsed')
+        parsed = JSON.stringify(JSON.parse(text), null, 2);
+        console.log(results_type, 'parsed')
     }
-    catch {
+    catch (e) {
         parsed = text;
-        console.log(parsed, 'not parsed');
+        console.log(text)
+        console.log(e.name, e.stack,e.message)
+        console.log(results_type, 'not parsed');
     }
     el.innerHTML = PR.prettyPrintOne(parsed);
     el.classList.remove("prettyprinted");
